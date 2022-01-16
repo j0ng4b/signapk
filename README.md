@@ -4,22 +4,23 @@ script not was extensively tested!
 
 # Dependencies
 Signapk require few external tools for properly work and they are:
-	- unzip: used to extract files.
-	- openssl: used for generate self-signed key and certificate pairs and the signature as well.
-	- aapt: for list apk entries and add the signature.
-	- common unix tool (cp, echo, etc)
+
+- unzip: used to extract files.
+- openssl: used for generate self-signed key and certificate pairs and the signature as well.
+- aapt: for list apk entries and add the signature.
+- common unix tool (cp, echo, etc)
 
 # Installation
 
-Installation proccess is quite simple, only run [install]() script. Signapk
+Installation proccess is quite simple, only run [install](https://github.com/j0ng4b/signapk/blob/main/install) script. Signapk
 will be installed on `$HOME/.local/bin` make sure that path is present on your
 `$PATH` variable or pass another installation directory:
 
-```
+```bash
 DESTDIR=<YOUR_DIR> ./install
 ```
 
 # License
-Signapk is licensed under terms of MIT license, see [LICENSE]() file for more
+Signapk is licensed under terms of MIT license, see [LICENSE](https://github.com/j0ng4b/signapk/blob/main/LICENSE) file for more
 information.
 
