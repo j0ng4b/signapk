@@ -1,0 +1,189 @@
+#!/usr/bin/env sh
+
+# Helper variables
+_key=""
+_certificate=""
+_in_file=""
+_out_file=""
+
+_err_msg=""
+_should_gen_key=""
+
+# Sign function
+sign() {
+	_tmpdir=$(mktemp -d)
+	_metainf="$_tmpdir/META-INF"
+	_manifest="$_metainf/MANIFEST.MF"
+	_signature="$_metainf/CERT.SF"
+	_signature_block="$_metainf/CERT.RSA"
+
+	# Put string to file
+	put_in() {
+		printf "$2" >> $1
+		printf "\r\n" >> $1
+	}
+
+	# Generate digest
+	get_digest() {
+		if [ -e "$1" ]; then
+			digest=$(openssl sha1 -binary $1 | openssl base64)
+		else
+			digest=$(printf "$1" | openssl sha1 -binary | openssl base64)
+		fi
+
+		printf "${digest}"
+	}
+
+	# Create META-INF directory
+	mkdir -p $_metainf
+
+	# Manifest file header
+	put_in $_manifest "Manifest-Version: 1.0"
+	put_in $_manifest "Created-By: 1.0 (J0ng4b Signapk)"
+	put_in $_manifest ""
+
+	# Signature file header
+	put_in $_signature "Signature-Version: 1.0"
+	put_in $_signature "Created-By: 1.0 (J0ng4b Signapk)"
+	put_in $_signature "SHA1-Digest-Manifest: $(get_digest $_manifest)"
+	put_in $_signature ""
+
+	# Generate entries
+	for _file in $(aapt list $_in_file); do
+		case ${_file##*.} in
+			MF | SF | RSA) continue ;;
+		esac
+
+		unzip -qqd $_tmpdir $_in_file $_file
+
+		_name="Name: $_file"
+		_mf_digest="SHA1-Digest: $(get_digest $_tmpdir/$_file)"
+
+		_sf_digest="$_name\r\n$_mf_digest\r\n\r\n"
+		_sf_digest="SHA1-Digest: $(get_digest "$_sf_digest")"
+
+		# Manifest entry
+		put_in $_manifest "$_name"
+		put_in $_manifest "$_mf_digest"
+		put_in $_manifest ""
+
+		# Signature entry
+		put_in $_signature "$_name"
+		put_in $_signature "$_sf_digest"
+		put_in $_signature ""
+	done
+
+	# Generate the signature block
+	openssl smime -sign -md sha1 -binary -noattr -outform der \
+		-in $_signature -out $_signature_block -inkey $_key \
+		-signer $_certificate
+
+	# Add signature files to apk
+	cp $_in_file $_out_file
+	cd $_tmpdir
+	aapt add $_out_file $(basename $_metainf)/* 2>/dev/null
+
+	# Remove temporary directory
+	rm -rf $_tmpdir
+}
+
+# Generate self-signed key and certificate
+genkey() {
+	openssl req -x509 -nodes -newkey rsa:4096 \
+		-keyout $_key -out $_certificate
+}
+
+# Show script usage
+show_usage() {
+	if [ "$_err_msg" ]; then
+		echo "$(basename $0) $_err_msg"
+		echo "Try '$(basename $0) --help' for more information."
+		exit 1
+	fi
+
+	echo "Usage:"
+	echo "  $0 sign --key <key> --certificate <certificate> --in <input> --out <output>"
+	echo "    Sign a apk file with specific key and certificate files"
+
+	echo "  $0 genkey --key <key-file> --centificate <certificate-file>"
+	echo "    Generate a key and certificate"
+
+	echo ""
+	echo "-k,--key        "
+	echo "-c,--certificate"
+	echo "-i,--in         "
+	echo "-o,--out        "
+	echo
+}
+
+get_absolute_name() {
+	echo "$(cd $(dirname $1) && pwd)/$(basename $1)"
+}
+
+# Parse command line argumments
+while [ "$#" -gt 0 ]; do
+	case $1 in
+		genkey)
+			_should_gen_key="true"
+			shift
+			;;
+
+		sign)
+			_should_gen_key="false"
+			shift
+			;;
+
+		-k | --key)
+			_key=$(get_absolute_name $2)
+			shift 2
+			;;
+
+		-c | --certificate)
+			_certificate=$(get_absolute_name $2)
+			shift 2
+			;;
+
+		-i | --in)
+			_in_file=$(get_absolute_name $2)
+			shift 2
+			;;
+
+		-o | --out)
+			_out_file=$(get_absolute_name $2)
+			shift 2
+			;;
+
+		-h | --help)
+			show_usage
+			exit
+			;;
+
+		*)
+			_err_msg="error: unrecognized input '$1'!"
+			show_usage
+			;;
+	esac
+done
+
+# Display error messages
+if [ -n "$_should_gen_key" ]; then
+	[ -z "$_key" ] && _err_msg="error: no key specified!"
+	[ -z "$_certificate" ] && _err_msg="error: no certificate specified!"
+
+	if [ "$_should_gen_key" = "false" ]; then
+		[ -z "$_in_file" ] && _err_msg="error: no input file specified!"
+		[ -z "$_out_file" ] && _err_msg="error: no output file specified!"
+	fi
+else
+	_err_msg="error: no command provided!"
+fi
+
+[ -n "$_err_msg" ] && show_usage
+
+# Sign the apk or generate a key
+if [ "$_should_gen_key" = "false" ]; then
+	sign
+elif [ "$_should_gen_key" = "true" ]; then
+	genkey
+fi
+
