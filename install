@@ -3,7 +3,7 @@
 DESTDIR=${DESTDIR:-$HOME/.local/bin}
 
 if [ ! -d $DESTDIR ]; then
-	mkdir -p $DESTDIR
+    mkdir -p $DESTDIR
 fi
 
 cp -f signapk $DESTDIR/
